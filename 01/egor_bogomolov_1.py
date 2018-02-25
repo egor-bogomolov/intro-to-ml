@@ -4,13 +4,27 @@ import matplotlib.pyplot as plt
 from collections import Counter
 from scipy.spatial import distance
 from sklearn import preprocessing
+from datetime import datetime
 
 filename = 'wine.csv'
 target_label = 'Class 1/2/3'
 distance_label = '__distance__'
 
 
+def read_data(fname):
+    print("Reading data from {0}".format(fname))
+    return pd.read_csv(fname)
+
+
+def split_data(data):
+    print("Splitting data into X and y, target label is {0}".format(target_label))
+    X = data.drop(target_label, 1)
+    y = data[target_label]
+    return X, y
+
+
 def normalize_data(data):
+    print("Normalizing data with MinMaxScaler")
     x = data.values
     min_max_scaler = preprocessing.MinMaxScaler()
     x_scaled = min_max_scaler.fit_transform(x)
@@ -18,6 +32,7 @@ def normalize_data(data):
 
 
 def train_test_split(X, y, ratio):
+    print("Splitting data, train ratio is {0}".format(ratio))
     if len(X) != len(y):
         raise ValueError("X and y should have the same length")
     size = len(X)
@@ -39,10 +54,10 @@ def knn(X_train, y_train, X_test, k=1, dist=distance.euclidean):
     X_joined = X_train.join(y_train)
     for index, row in X_test.iterrows():
         X_joined[distance_label] = [dist(r, row) for i, r in X_train.iterrows()]
-        X_joined.sort_values(by=distance_label, inplace=True)
+        X_sorted = X_joined.sort_values(by=distance_label)
         counts = Counter()
         for i in range(k):
-            counts[X_joined.iloc[i][target_label]] += 1
+            counts[X_sorted.iloc[i][target_label]] += 1
         target, occurrences = counts.most_common(1)[0]
         y_test.append(int(target))
     return y_test
@@ -68,12 +83,17 @@ def print_precision_recall(y_pred, y_test):
             precision = tp[c] / float(tp[c] + fp[c])
         if tp[c] + fn[c] != 0:
             recall = tp[c] / float(tp[c] + fn[c])
-        print(c, precision, recall)
+        print("For class {0}:\nprecision = {1}, recall = {2}".format(c, precision, recall))
 
 
-def loocv(X_train, y_train, dist=distance.euclidean):
+def loocv(X_train, y_train, dist=distance.euclidean, print_rate=10):
+    size = len(X_train)
+    min_k = 1
+    max_k = min(30, len(X_train))
+    print("LOOCV, choosing among k from {0} to {1}".format(min_k, max_k))
+    start = datetime.now()
     missed = Counter()
-    for k in range(1, min(len(X_train) + 1, 11)):
+    for k in range(min_k, max_k + 1):
         for index, row in X_train.iterrows():
             result = knn(
                 X_train.drop([index], axis=0),
@@ -83,25 +103,38 @@ def loocv(X_train, y_train, dist=distance.euclidean):
                 dist=dist)
             if result != y_train[index]:
                 missed[k] += 1
+        opt_k, misses = missed.most_common()[-1]
+        if k % print_rate == 0:
+            print("Processed k up to {0}\nBest k = {1}, precision = {2}"
+                  .format(k, opt_k, 1. - float(misses) / (size - 1)))
 
     opt_k, misses = missed.most_common()[-1]
+    finish = datetime.now()
+    print("LOOCV finished in {0} sec\nBest k = {1}, precision = {2}"
+          .format((finish - start).total_seconds(), opt_k, misses))
     plt.figure(figsize=(9, 9))
-    plt.plot(np.arange(1, 11), missed.values())
+    plt.plot(np.arange(min_k, max_k + 1), missed.values())
     plt.ylabel('LOO')
     plt.xlabel('Number of K')
     plt.show()
     return opt_k
 
 
-def main():
-    data = pd.read_csv(filename)
-    X = data.drop(target_label, 1)
-    X = normalize_data(X)
-    y = data[target_label]
-    X_train, y_train, X_test, y_test = train_test_split(X, y, 0.7)
-    k = loocv(X_train, y_train)
-    y_pred = knn(X_train, y_train, X_test, k)
+def run_loocv_with_results(X_train, y_train, X_test, y_test, dist=distance.euclidean):
+    k = loocv(X_train, y_train, dist)
+    y_pred = knn(X_train, y_train, X_test, k, dist)
     print_precision_recall(y_pred, y_test)
+
+
+def main():
+    data = read_data(filename)
+    X, y = split_data(data)
+    X = normalize_data(X)
+    X_train, y_train, X_test, y_test = train_test_split(X, y, 0.7)
+    print("\nRunning LOOCV for Euclidean distance:")
+    run_loocv_with_results(X_train, y_train, X_test, y_test, distance.euclidean)
+    print("\nRunning LOOCV for Cityblock distance:")
+    run_loocv_with_results(X_train, y_train, X_test, y_test, distance.cityblock)
 
 
 if __name__ == '__main__':
