@@ -1,20 +1,28 @@
-import numpy as np
 import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
 from collections import Counter
+from scipy.spatial import distance
+from sklearn import preprocessing
 
-file = 'wine.csv'
+filename = 'wine.csv'
 target_label = 'Class 1/2/3'
 distance_label = '__distance__'
 
 
-def train_test_split(X, y, ratio, random_seed=None):
+def normalize_data(data):
+    x = data.values
+    min_max_scaler = preprocessing.MinMaxScaler()
+    x_scaled = min_max_scaler.fit_transform(x)
+    return pd.DataFrame(x_scaled)
+
+
+def train_test_split(X, y, ratio):
     if len(X) != len(y):
         raise ValueError("X and y should have the same length")
     size = len(X)
     train_size = int(size * ratio)
 
-    if random_seed is not None:
-        np.random.seed(random_seed)
     indexes = np.arange(size)
     np.random.shuffle(indexes)
 
@@ -26,25 +34,22 @@ def train_test_split(X, y, ratio, random_seed=None):
     return X_train, y_train, X_test, y_test
 
 
-def knn(X_train, y_train, X_test, k=1, dist=np.linalg.norm):
-    y = []
+def knn(X_train, y_train, X_test, k=1, dist=distance.euclidean):
+    y_test = []
     X_joined = X_train.join(y_train)
     for index, row in X_test.iterrows():
-        print(index)
-        X_joined[distance_label] = [dist(r - row) for i, r in X_train.iterrows()]
-        X_sorted = X_joined.sort_values(by=distance_label)
+        X_joined[distance_label] = [dist(r, row) for i, r in X_train.iterrows()]
+        X_joined.sort_values(by=distance_label, inplace=True)
         counts = Counter()
         for i in range(k):
-            counts[X_sorted.iloc[i][target_label]] += 1
+            counts[X_joined.iloc[i][target_label]] += 1
         target, occurrences = counts.most_common(1)[0]
-        y.append(int(target))
-    return y
+        y_test.append(int(target))
+    return y_test
 
 
 def print_precision_recall(y_pred, y_test):
     y_test = y_test.tolist()
-    print(y_pred)
-    print(y_test)
     n_classes = len(np.unique(y_test))
     fp = Counter()  # false positive
     fn = Counter()  # false negative
@@ -58,45 +63,45 @@ def print_precision_recall(y_pred, y_test):
             fp[int(y_pred[i])] += 1
 
     for c in range(1, n_classes + 1):
-        precision = recall = 0
-        if tp[c] + fp[c]:
-            precision = tp[c] / (tp[c] + fp[c])
+        precision = recall = 0.
+        if tp[c] + fp[c] != 0:
+            precision = tp[c] / float(tp[c] + fp[c])
         if tp[c] + fn[c] != 0:
-            recall = tp[c] / (tp[c] + fn[c])
+            recall = tp[c] / float(tp[c] + fn[c])
         print(c, precision, recall)
 
 
-def loocv(X_train, y_train, dist=np.linalg.norm):
+def loocv(X_train, y_train, dist=distance.euclidean):
     missed = Counter()
-    print(X_train)
-    print(y_train)
-    for k in range(1, len(X_train) + 1):
-        print(k)
-        missed[k] = 0
+    for k in range(1, min(len(X_train) + 1, 11)):
         for index, row in X_train.iterrows():
             result = knn(
                 X_train.drop([index], axis=0),
                 y_train.drop([index], axis=0),
-                X_train.ix[index].to_frame(),
+                row.to_frame().transpose(),
                 k=k,
                 dist=dist)
-            if result != y_train.iloc(index):
+            if result != y_train[index]:
                 missed[k] += 1
 
-    opt_k, misses = missed.most_common(1)[-1]
-    print(opt_k, misses)
-    print(missed.most_common(1)[0])
+    opt_k, misses = missed.most_common()[-1]
+    plt.figure(figsize=(9, 9))
+    plt.plot(np.arange(1, 11), missed.values())
+    plt.ylabel('LOO')
+    plt.xlabel('Number of K')
+    plt.show()
     return opt_k
 
 
 def main():
-    data = pd.read_csv(file)
+    data = pd.read_csv(filename)
     X = data.drop(target_label, 1)
+    X = normalize_data(X)
     y = data[target_label]
-    X_train, y_train, X_test, y_test = train_test_split(X, y, 0.5, random_seed=239)
-    y_pred = knn(X_train, y_train, X_test, k=1)
+    X_train, y_train, X_test, y_test = train_test_split(X, y, 0.7)
+    k = loocv(X_train, y_train)
+    y_pred = knn(X_train, y_train, X_test, k)
     print_precision_recall(y_pred, y_test)
-    print(loocv(X_train, y_train))
 
 
 if __name__ == '__main__':
