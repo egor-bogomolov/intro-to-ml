@@ -58,7 +58,7 @@ def knn(X_train, y_train, X_test, k=1, dist=distance.euclidean):
         counts = Counter()
         for i in range(k):
             counts[X_sorted.iloc[i][target_label]] += 1
-        target, occurrences = counts.most_common(1)[0]
+        target, occurrences = counts.most_common()[0]
         y_test.append(int(target))
     return y_test
 
@@ -103,15 +103,17 @@ def loocv(X_train, y_train, dist=distance.euclidean, print_rate=10):
                 dist=dist)
             if result != y_train[index]:
                 missed[k] += 1
-        opt_k, misses = missed.most_common()[-1]
+        opt_k = min(missed, key=lambda x: (missed.get(x), x))
+        misses = missed[opt_k]
         if k % print_rate == 0:
             print("Processed k up to {0}\nBest k = {1}, precision = {2}"
                   .format(k, opt_k, 1. - float(misses) / (size - 1)))
 
-    opt_k, misses = missed.most_common()[-1]
+    opt_k = min(missed, key=lambda x: (missed.get(x), x))
+    misses = missed[opt_k]
     finish = datetime.now()
     print("LOOCV finished in {0} sec\nBest k = {1}, precision = {2}"
-          .format((finish - start).total_seconds(), opt_k, misses))
+          .format((finish - start).total_seconds(), opt_k, 1. - float(misses) / (size - 1)))
     plt.figure(figsize=(9, 9))
     plt.plot(np.arange(min_k, max_k + 1), missed.values())
     plt.ylabel('LOO')
@@ -131,6 +133,7 @@ def main():
     X, y = split_data(data)
     X = normalize_data(X)
     X_train, y_train, X_test, y_test = train_test_split(X, y, 0.7)
+
     print("\nRunning LOOCV for Euclidean distance:")
     run_loocv_with_results(X_train, y_train, X_test, y_test, distance.euclidean)
     print("\nRunning LOOCV for Cityblock distance:")
