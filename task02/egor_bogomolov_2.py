@@ -6,8 +6,8 @@ import numpy as np
 import cv2
 
 filename = 'apple.png'
-filename_out = 'apple-16.png'
-clusters = 16
+filename_out = 'apple-8.png'
+clusters = 8
 
 
 def read_image(path):
@@ -33,7 +33,7 @@ def compress_objects(X):
 
 
 def find_closest_in_set(obj, set_of_objects, distance_metric):
-    distances_to_objects = map(lambda x: distance_metric(x, obj), set_of_objects)
+    distances_to_objects = list(map(lambda x: distance_metric(x, obj), set_of_objects))
     ind = np.argmin(distances_to_objects)
     return distances_to_objects[ind], ind
 
@@ -43,7 +43,7 @@ def initial_centroids(X, values, n_clusters, n_samples, distance_metric):
     centroids = [X[randint(0, n_samples)]]
     for i in range(n_clusters - 1):
         print("Looking for centroid #{0}".format(i + 2))
-        modified_values = map(lambda obj: find_closest_in_set(obj, centroids, distance_metric)[0], values)
+        modified_values = list(map(lambda obj: find_closest_in_set(obj, centroids, distance_metric)[0], values))
         ind = np.argmax(modified_values)
         centroids.append(values[ind])
     print("Finished picking centroids")
